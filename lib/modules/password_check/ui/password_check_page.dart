@@ -109,7 +109,7 @@ class _PasswordCheckPageState extends ConsumerState<PasswordCheckPage> {
                               ? Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.red.withOpacity(0.1),
+                                    color: Colors.red.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(color: Colors.red),
                                   ),
@@ -131,7 +131,7 @@ class _PasswordCheckPageState extends ConsumerState<PasswordCheckPage> {
                               : Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.green.withOpacity(0.1),
+                                    color: Colors.green.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(color: Colors.green),
                                   ),
@@ -162,7 +162,7 @@ class _PasswordCheckPageState extends ConsumerState<PasswordCheckPage> {
                           error: (error, _) => Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.orange.withOpacity(0.1),
+                              color: Colors.orange.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(color: Colors.orange),
                             ),

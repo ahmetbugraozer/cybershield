@@ -22,12 +22,12 @@ class CyberCard extends StatelessWidget {
             end: Alignment.bottomRight,
             colors: [
               const Color(0xFF1A1A1A),
-              const Color(0xFF2A2A2A).withOpacity(0.8),
+              const Color(0xFF2A2A2A).withValues(alpha: 0.8),
             ],
           ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF00E5FF).withOpacity(0.1),
+              color: const Color(0xFF00E5FF).withValues(alpha: 0.1),
               blurRadius: 20,
               spreadRadius: 0,
             ),

@@ -7,11 +7,14 @@ class CyberShieldApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'CyberShield',
-      theme: AppTheme.darkTheme,
-      home: const MainNavigationWrapper(),
-      debugShowCheckedModeBanner: false,
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: MaterialApp(
+        title: 'CyberShield',
+        theme: AppTheme.darkTheme,
+        home: const MainNavigationWrapper(),
+        debugShowCheckedModeBanner: false,
+      ),
     );
   }
 }

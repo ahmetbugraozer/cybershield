@@ -43,7 +43,7 @@ class PasswordSuggestionsWidget extends ConsumerWidget {
                               Theme.of(context)
                                   .colorScheme
                                   .primary
-                                  .withOpacity(0.7),
+                                  .withValues(alpha: 0.7),
                             ],
                           ),
                         ),
