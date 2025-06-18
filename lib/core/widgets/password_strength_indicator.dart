@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class PasswordStrengthIndicator extends StatelessWidget {
-  final int score; // 0-4 arası
+  final int score; // 0-4
   final int breachCount;
 
   const PasswordStrengthIndicator({
@@ -21,10 +21,7 @@ class PasswordStrengthIndicator extends StatelessWidget {
               child: _buildStrengthBar(),
             ),
             const SizedBox(width: 12),
-            Text(
-              _getEmoji(),
-              style: const TextStyle(fontSize: 24),
-            ),
+            _buildStrengthIndicator(),
           ],
         ),
         const SizedBox(height: 8),
@@ -35,24 +32,6 @@ class PasswordStrengthIndicator extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
         ),
-        if (breachCount > 0) ...[
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.red),
-            ),
-            child: Text(
-              '⚠️ Bu parola $breachCount defa sızdırılmış!',
-              style: const TextStyle(
-                color: Colors.red,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -80,20 +59,32 @@ class PasswordStrengthIndicator extends StatelessWidget {
     );
   }
 
-  String _getEmoji() {
-    switch (score) {
-      case 0:
-      case 1:
-        return '😞';
-      case 2:
-        return '😐';
-      case 3:
-        return '😊';
-      case 4:
-        return '😍';
-      default:
-        return '😞';
-    }
+  Widget _buildStrengthIndicator() {
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: _getStrengthColor(),
+        boxShadow: [
+          BoxShadow(
+            color: _getStrengthColor().withOpacity(0.3),
+            blurRadius: 8,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Center(
+        child: Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _getStrengthColor().withOpacity(0.8),
+          ),
+        ),
+      ),
+    );
   }
 
   String _getStrengthText() {

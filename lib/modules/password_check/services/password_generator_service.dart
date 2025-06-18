@@ -89,7 +89,7 @@ class PasswordGeneratorService {
 
     return PasswordSuggestion(
       type: 'pattern',
-      suggestion: 'Kendi oluşturun',
+      suggestion: 'Kendiniz oluşturun',
       description: pattern,
       icon: '🎯',
     );

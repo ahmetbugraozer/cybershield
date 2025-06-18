@@ -25,8 +25,8 @@ class _PasswordCheckPageState extends ConsumerState<PasswordCheckPage> {
   @override
   Widget build(BuildContext context) {
     final strengthResult = ref.watch(passwordStrengthProvider);
-    final breachCheck = ref.watch(breachCheckProvider);
-    final isCheckingBreach = ref.watch(isCheckingBreachProvider);
+    final breachCheckAsync = ref.watch(breachCheckProvider);
+    final password = ref.watch(passwordInputProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -94,24 +94,90 @@ class _PasswordCheckPageState extends ConsumerState<PasswordCheckPage> {
                     if (strengthResult != null) ...[
                       PasswordStrengthIndicator(
                         score: strengthResult.score,
-                        breachCount: breachCheck.when(
+                        breachCount: breachCheckAsync.when(
                           data: (result) => result?.breachCount ?? 0,
-                          loading: () => 0,
+                          loading: () => -1, // -1 = loading state
                           error: (_, __) => 0,
                         ),
                       ),
                       const SizedBox(height: 12),
-                      if (isCheckingBreach)
-                        const Row(
-                          children: [
-                            SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                      // İhlal kontrol durumu
+                      if (password.isNotEmpty && password.length >= 3)
+                        breachCheckAsync.when(
+                          data: (result) => result != null &&
+                                  result.breachCount > 0
+                              ? Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.red),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.warning,
+                                          color: Colors.red, size: 20),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          result.message,
+                                          style: const TextStyle(
+                                              color: Colors.red),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.green),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(Icons.check_circle,
+                                          color: Colors.green, size: 20),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Parola bilinen ihlallerde bulunamadı',
+                                        style: TextStyle(color: Colors.green),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                          loading: () => const Row(
+                            children: [
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              SizedBox(width: 8),
+                              Text('İhlal kontrolü yapılıyor...'),
+                            ],
+                          ),
+                          error: (error, _) => Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.orange),
                             ),
-                            SizedBox(width: 8),
-                            Text('İhlal kontrolü yapılıyor...'),
-                          ],
+                            child: const Row(
+                              children: [
+                                Icon(Icons.info,
+                                    color: Colors.orange, size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'İhlal kontrolü yapılamadı',
+                                  style: TextStyle(color: Colors.orange),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                     ],
                   ],

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/password_strength_service.dart';
 import '../services/hibp_service.dart';
@@ -12,7 +13,6 @@ final passwordGeneratorServiceProvider =
 
 // State provider'ları
 final passwordInputProvider = StateProvider<String>((ref) => '');
-final isCheckingBreachProvider = StateProvider<bool>((ref) => false);
 
 // Password strength provider
 final passwordStrengthProvider = Provider<PasswordStrengthResult?>((ref) {
@@ -23,19 +23,41 @@ final passwordStrengthProvider = Provider<PasswordStrengthResult?>((ref) {
   return service.analyzePassword(password);
 });
 
-// Breach check provider
-final breachCheckProvider = FutureProvider<BreachCheckResult?>((ref) async {
+// Debounced password provider (800ms gecikme ile)
+final debouncedPasswordProvider = Provider<String>((ref) {
   final password = ref.watch(passwordInputProvider);
+
+  if (password.isEmpty || password.length < 3) return '';
+
+  // Timer ile debounce
+  Timer? timer;
+  ref.onDispose(() => timer?.cancel());
+
+  timer = Timer(const Duration(milliseconds: 800), () {
+    ref.invalidateSelf();
+  });
+
+  return password;
+});
+
+// Breach check provider - sadece debounced password değiştiğinde çalışır
+final breachCheckProvider =
+    FutureProvider.autoDispose<BreachCheckResult?>((ref) async {
+  final password = ref.watch(debouncedPasswordProvider);
+
   if (password.isEmpty) return null;
 
   final service = ref.read(hibpServiceProvider);
-  ref.read(isCheckingBreachProvider.notifier).state = true;
 
   try {
     final result = await service.checkPasswordBreach(password);
     return result;
-  } finally {
-    ref.read(isCheckingBreachProvider.notifier).state = false;
+  } catch (e) {
+    return BreachCheckResult(
+      isBreached: false,
+      breachCount: 0,
+      message: 'Kontrol edilemedi - ${e.toString()}',
+    );
   }
 });
 

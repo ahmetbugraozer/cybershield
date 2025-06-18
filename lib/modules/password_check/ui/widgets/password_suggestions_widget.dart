@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import '../../../../core/widgets/cyber_card.dart';
 import '../../viewmodel/password_check_provider.dart';
 
@@ -31,9 +32,27 @@ class PasswordSuggestionsWidget extends ConsumerWidget {
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      Text(
-                        suggestion.icon,
-                        style: const TextStyle(fontSize: 24),
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [
+                              Theme.of(context).colorScheme.primary,
+                              Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withOpacity(0.7),
+                            ],
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            suggestion.icon,
+                            style: const TextStyle(fontSize: 20),
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -65,14 +84,19 @@ class PasswordSuggestionsWidget extends ConsumerWidget {
                       if (suggestion.type != 'pattern')
                         IconButton(
                           icon: const Icon(Icons.copy),
-                          onPressed: () {
-                            // TODO: Clipboard'a kopyala
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Panoya kopyalandı'),
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
+                          onPressed: () async {
+                            await Clipboard.setData(
+                                ClipboardData(text: suggestion.suggestion));
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Text('Panoya kopyalandı'),
+                                  duration: const Duration(seconds: 2),
+                                  backgroundColor:
+                                      Theme.of(context).colorScheme.primary,
+                                ),
+                              );
+                            }
                           },
                         ),
                     ],
