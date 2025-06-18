@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/cyber_card.dart';
 import '../../../core/widgets/password_strength_indicator.dart';
+import '../viewmodel/password_check_provider.dart';
+import 'widgets/password_suggestions_widget.dart';
 
 class PasswordCheckPage extends ConsumerStatefulWidget {
   const PasswordCheckPage({super.key});
@@ -15,7 +17,17 @@ class _PasswordCheckPageState extends ConsumerState<PasswordCheckPage> {
   bool _obscureText = true;
 
   @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final strengthResult = ref.watch(passwordStrengthProvider);
+    final breachCheck = ref.watch(breachCheckProvider);
+    final isCheckingBreach = ref.watch(isCheckingBreachProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Parola Gücü Kontrolü'),
@@ -48,12 +60,19 @@ class _PasswordCheckPageState extends ConsumerState<PasswordCheckPage> {
                                 fontWeight: FontWeight.bold,
                               ),
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Parola gücünüzü analiz edin ve veri ihlallerini kontrol edin.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.grey[400],
+                          ),
+                    ),
                     const SizedBox(height: 16),
                     TextField(
                       controller: _passwordController,
                       obscureText: _obscureText,
                       onChanged: (value) {
-                        // TODO: Parola gücü hesaplama
+                        ref.read(passwordInputProvider.notifier).state = value;
                       },
                       decoration: InputDecoration(
                         labelText: 'Parolanızı girin',
@@ -72,15 +91,34 @@ class _PasswordCheckPageState extends ConsumerState<PasswordCheckPage> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    const PasswordStrengthIndicator(
-                      score: 2, // TODO: Gerçek skor
-                      breachCount: 0, // TODO: Gerçek ihlal sayısı
-                    ),
+                    if (strengthResult != null) ...[
+                      PasswordStrengthIndicator(
+                        score: strengthResult.score,
+                        breachCount: breachCheck.when(
+                          data: (result) => result?.breachCount ?? 0,
+                          loading: () => 0,
+                          error: (_, __) => 0,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (isCheckingBreach)
+                        const Row(
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            SizedBox(width: 8),
+                            Text('İhlal kontrolü yapılıyor...'),
+                          ],
+                        ),
+                    ],
                   ],
                 ),
               ),
               const SizedBox(height: 20),
-              // Öneri kartları buraya gelecek
+              const Expanded(child: PasswordSuggestionsWidget()),
             ],
           ),
         ),
