@@ -28,6 +28,8 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
         children: _pages,
       ),
       bottomNavigationBar: BottomNavigationBar(
+        selectedFontSize: 16,
+        unselectedFontSize: 12,
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
         items: const [
