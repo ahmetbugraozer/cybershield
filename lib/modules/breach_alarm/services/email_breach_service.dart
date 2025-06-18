@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import '../../../core/utils/env_config.dart';
 
 class BreachInfo {
@@ -92,9 +93,7 @@ class EmailBreachService {
 
       final response = await _dio.get(
         '$_baseUrl/breachedaccount/$encodedEmail',
-        queryParameters: {
-          'truncateResponse': 'false',
-        },
+        queryParameters: {'truncateResponse': 'false'},
         options: Options(
           validateStatus: (status) {
             // 200 (found breaches), 404 (no breaches), 429 (rate limit) kabul et
@@ -104,8 +103,8 @@ class EmailBreachService {
         ),
       );
 
-      print('HIBP API Response: ${response.statusCode}');
-      print('Response data: ${response.data}');
+      debugPrint('HIBP API Response: ${response.statusCode}');
+      debugPrint('Response data: ${response.data}');
 
       if (response.statusCode == 200) {
         if (response.data is List) {
@@ -151,11 +150,11 @@ class EmailBreachService {
         throw Exception('API yanıt hatası: ${response.statusCode}');
       }
     } on DioException catch (e) {
-      print('DioException: ${e.type} - ${e.message}');
-      print('Response: ${e.response?.data}');
+      debugPrint('DioException: ${e.type} - ${e.message}');
+      debugPrint('Response: ${e.response?.data}');
       return _handleError(e, email);
     } catch (e) {
-      print('General Exception: $e');
+      debugPrint('General Exception: $e');
       return EmailBreachResult(
         email: email,
         hasBreaches: false,
@@ -209,8 +208,9 @@ class EmailBreachService {
   }
 
   bool _isValidEmail(String email) {
-    final emailRegex =
-        RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+    final emailRegex = RegExp(
+      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    );
     return emailRegex.hasMatch(email);
   }
 }

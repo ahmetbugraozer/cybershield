@@ -76,7 +76,7 @@ final emailBreachCheckProvider = FutureProvider.autoDispose<
     return null;
   }
 
-  print('Starting breach check for: $email');
+  debugPrint('Starting breach check for: $email');
   ref.read(isCheckingEmailProvider.notifier).state = true;
 
   try {
@@ -99,57 +99,80 @@ final emailBreachCheckProvider = FutureProvider.autoDispose<
     // }
 
     // Direct API call
-    print('Making API call...');
+    debugPrint('Making API call...');
     final result = await service.checkEmailBreaches(email);
-    print('API call completed: ${result.message}');
+    debugPrint('API call completed: ${result.message}');
 
     // Sonucu cache'e kaydet
     await historyService.saveResult(result);
 
     return result;
   } catch (e) {
-    print('Provider error: $e');
+    debugPrint('Provider error: $e');
     final shortError =
         e.toString().length > 100
             ? '${e.toString().substring(0, 97)}...'
             : e.toString();
     throw Exception('Kontrol edilemedi: $shortError');
   } finally {
-    print('Clearing loading state');
+    debugPrint('Clearing loading state');
     if (ref.exists(isCheckingEmailProvider)) {
       ref.read(isCheckingEmailProvider.notifier).state = false;
     }
   }
 });
 
-// Manual trigger provider for button
-final manualEmailCheckProvider = FutureProvider.family
-    .autoDispose<EmailBreachResult?, String>((ref, email) async {
-      if (email.isEmpty) return null;
+// Manual trigger provider for button - düzeltilmiş versiyon
+final manualEmailCheckProvider = StateNotifierProvider.family.autoDispose<
+  ManualEmailCheckNotifier,
+  AsyncValue<EmailBreachResult?>,
+  String
+>((ref, email) {
+  return ManualEmailCheckNotifier(ref, email);
+});
 
-      print('Manual check triggered for: $email');
+class ManualEmailCheckNotifier
+    extends StateNotifier<AsyncValue<EmailBreachResult?>> {
+  final Ref _ref;
+  final String _email;
 
+  ManualEmailCheckNotifier(this._ref, this._email)
+    : super(const AsyncValue.data(null));
+
+  Future<void> checkEmail() async {
+    if (_email.isEmpty) {
+      state = const AsyncValue.data(null);
+      return;
+    }
+
+    debugPrint('Manual check triggered for: $_email');
+    state = const AsyncValue.loading();
+
+    try {
+      final service = _ref.read(emailBreachServiceProvider);
+      final result = await service.checkEmailBreaches(_email);
+
+      // Save to history - daha güvenli şekilde
       try {
-        final service = ref.read(emailBreachServiceProvider);
-        final result = await service.checkEmailBreaches(email);
-
-        // Save to history (Hive hatası önemli değil)
-        try {
-          final historyService = ref.read(breachHistoryServiceProvider);
-          await historyService.init();
-          await historyService.saveResult(result);
-          print('Result saved to history');
-        } catch (hiveError) {
-          print('Hive save error (non-critical): $hiveError');
-          // Hive hatası API sonucunu etkilemez
-        }
-
-        return result;
-      } catch (e) {
-        print('API error: $e');
-        rethrow;
+        final historyService = _ref.read(breachHistoryServiceProvider);
+        await historyService.init(); // Burada init'i çağır, hata varsa yakala
+        await historyService.saveResult(result);
+        debugPrint('Result saved to history');
+      } catch (hiveError) {
+        // Hive hatası sonucu etkilemez, sadece kayıt yapılmaz
+        debugPrint('Hive save error (non-critical): $hiveError');
       }
-    });
+
+      state = AsyncValue.data(result);
+    } catch (e) {
+      debugPrint('API error: $e');
+      state = AsyncValue.error(e, StackTrace.current);
+    }
+  }
+}
+
+// Loading state için ayrı provider
+final manualCheckLoadingProvider = StateProvider<bool>((ref) => false);
 
 // Breach history provider with safe initialization
 final breachHistoryProvider = FutureProvider<List<StoredBreachResult>>((
@@ -160,7 +183,7 @@ final breachHistoryProvider = FutureProvider<List<StoredBreachResult>>((
     await historyService.init();
     return historyService.getAllResults();
   } catch (e) {
-    print('History provider error: $e');
+    debugPrint('History provider error: $e');
     return <StoredBreachResult>[];
   }
 });
@@ -174,7 +197,7 @@ final recentBreachesProvider = FutureProvider<List<StoredBreachResult>>((
     await historyService.init();
     return historyService.getRecentBreaches();
   } catch (e) {
-    print('Recent breaches provider error: $e');
+    debugPrint('Recent breaches provider error: $e');
     return <StoredBreachResult>[];
   }
 });

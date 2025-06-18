@@ -24,9 +24,16 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
 
-    // History service'i initialize et
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(breachHistoryServiceProvider).init();
+    // History service'i initialize et - daha güvenli yöntem
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final historyService = ref.read(breachHistoryServiceProvider);
+        await historyService.init();
+        debugPrint('History service initialized on app start');
+      } catch (e) {
+        debugPrint('Error initializing history service on app start: $e');
+        // Hata gösterebilirsiniz ancak uygulama çalışmaya devam etmeli
+      }
     });
   }
 
@@ -39,14 +46,20 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
 
   @override
   Widget build(BuildContext context) {
-    final isChecking = ref.watch(isCheckingEmailProvider);
     final isValidEmail = ref.watch(emailValidationProvider);
     final email = ref.watch(emailInputProvider);
+    final manualLoading = ref.watch(manualCheckLoadingProvider);
 
-    // Manual check result watch
-    final manualCheckAsync = _lastCheckedEmail != null
-        ? ref.watch(manualEmailCheckProvider(_lastCheckedEmail!))
-        : const AsyncValue<EmailBreachResult?>.data(null);
+    // Manual check result watch - düzeltilmiş
+    final manualCheckNotifier =
+        _lastCheckedEmail != null
+            ? ref.watch(manualEmailCheckProvider(_lastCheckedEmail!).notifier)
+            : null;
+
+    final manualCheckState =
+        _lastCheckedEmail != null
+            ? ref.watch(manualEmailCheckProvider(_lastCheckedEmail!))
+            : const AsyncValue<EmailBreachResult?>.data(null);
 
     return Scaffold(
       appBar: AppBar(
@@ -66,10 +79,7 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF0A0A0A),
-              Color(0xFF1A2E1A),
-            ],
+            colors: [Color(0xFF0A0A0A), Color(0xFF1A2E1A)],
           ),
         ),
         child: TabBarView(
@@ -86,20 +96,14 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                       children: [
                         Text(
                           'E-posta İhlal Kontrolü',
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'E-posta adresinizin veri ihlallerinde yer alıp almadığını kontrol edin.',
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Colors.grey[400],
-                                  ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.grey[400]),
                         ),
                         const SizedBox(height: 16),
                         TextField(
@@ -116,11 +120,12 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
-                                color: email.isEmpty
-                                    ? Colors.grey
-                                    : (isValidEmail
-                                        ? Colors.green
-                                        : Colors.red),
+                                color:
+                                    email.isEmpty
+                                        ? Colors.grey
+                                        : (isValidEmail
+                                            ? Colors.green
+                                            : Colors.red),
                               ),
                             ),
                             suffixIcon: Row(
@@ -131,9 +136,10 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                                     isValidEmail
                                         ? Icons.check_circle
                                         : Icons.error,
-                                    color: isValidEmail
-                                        ? Colors.green
-                                        : Colors.red,
+                                    color:
+                                        isValidEmail
+                                            ? Colors.green
+                                            : Colors.red,
                                     size: 20,
                                   ),
                                 if (_emailController.text.isNotEmpty)
@@ -146,7 +152,8 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                                           .state = '';
                                       ref
                                           .read(
-                                              isCheckingEmailProvider.notifier)
+                                            isCheckingEmailProvider.notifier,
+                                          )
                                           .state = false;
                                       ref.invalidate(emailBreachCheckProvider);
                                     },
@@ -172,7 +179,8 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                               color: Colors.red.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
-                                  color: Colors.red.withValues(alpha: 0.3)),
+                                color: Colors.red.withValues(alpha: 0.3),
+                              ),
                             ),
                             child: const Row(
                               children: [
@@ -182,7 +190,9 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                                   child: Text(
                                     'Geçerli bir e-posta adresi girin',
                                     style: TextStyle(
-                                        color: Colors.red, fontSize: 12),
+                                      color: Colors.red,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -194,51 +204,77 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: (isChecking ||
-                                    _emailController.text.isEmpty ||
-                                    !isValidEmail)
-                                ? null
-                                : () async {
-                                    final email = _emailController.text.trim();
-                                    if (email.isEmpty || !isValidEmail) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                              'Lütfen geçerli bir e-posta adresi girin'),
-                                        ),
+                            onPressed:
+                                (manualLoading ||
+                                        _emailController.text.isEmpty ||
+                                        !isValidEmail)
+                                    ? null
+                                    : () async {
+                                      final email =
+                                          _emailController.text.trim();
+                                      if (email.isEmpty || !isValidEmail) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Lütfen geçerli bir e-posta adresi girin',
+                                            ),
+                                          ),
+                                        );
+                                        return;
+                                      }
+
+                                      debugPrint(
+                                        'Button pressed for email: $email',
                                       );
-                                      return;
-                                    }
 
-                                    debugPrint(
-                                        'Button pressed for email: $email');
-                                    setState(() {
-                                      _lastCheckedEmail = email;
-                                    });
-                                    ref
-                                        .read(isCheckingEmailProvider.notifier)
-                                        .state = true;
+                                      // Loading state'i aktif et
+                                      ref
+                                          .read(
+                                            manualCheckLoadingProvider.notifier,
+                                          )
+                                          .state = true;
 
-                                    // Manual trigger
-                                    ref.invalidate(manualEmailCheckProvider(
-                                        _lastCheckedEmail!));
-                                  },
-                            child: isChecking
-                                ? const Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      ),
-                                      SizedBox(width: 8),
-                                      Text('Kontrol ediliyor...'),
-                                    ],
-                                  )
-                                : const Text('Kontrol Et'),
+                                      setState(() {
+                                        _lastCheckedEmail = email;
+                                      });
+
+                                      // Manuel kontrolü başlat
+                                      try {
+                                        final notifier = ref.read(
+                                          manualEmailCheckProvider(
+                                            email,
+                                          ).notifier,
+                                        );
+                                        await notifier.checkEmail();
+                                      } finally {
+                                        ref
+                                            .read(
+                                              manualCheckLoadingProvider
+                                                  .notifier,
+                                            )
+                                            .state = false;
+                                      }
+                                    },
+                            child:
+                                manualLoading
+                                    ? const Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text('Kontrol ediliyor...'),
+                                      ],
+                                    )
+                                    : const Text('Kontrol Et'),
                           ),
                         ),
                       ],
@@ -246,112 +282,144 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                   ),
                   const SizedBox(height: 20),
 
-                  // Sonuç gösterimi - Manual check result
+                  // Sonuç gösterimi - düzeltilmiş
                   Expanded(
-                    child: manualCheckAsync.when<Widget>(
-                      data: (result) => result != null
-                          ? BreachResultWidget(result: result)
-                          : const Center(
-                              child: Text(
-                                'E-posta adresi girin ve kontrol başlatın',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            ),
-                      loading: () => const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(),
-                            SizedBox(height: 16),
-                            Text('HaveIBeenPwned API kontrol ediliyor...'),
-                          ],
-                        ),
-                      ),
-                      error: (error, _) => Center(
-                        child: SingleChildScrollView(
-                          child: CyberCard(
+                    child: manualCheckState.when<Widget>(
+                      data:
+                          (result) =>
+                              result != null
+                                  ? BreachResultWidget(result: result)
+                                  : const Center(
+                                    child: Text(
+                                      'E-posta adresi girin ve kontrol başlatın',
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
+                                  ),
+                      loading:
+                          () => const Center(
                             child: Column(
-                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(
-                                  Icons.error,
-                                  color: Colors.red,
-                                  size: 48,
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Kontrol sırasında hata oluştu',
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium,
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 8),
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                        color:
-                                            Colors.red.withValues(alpha: 0.3)),
-                                  ),
-                                  child: Text(
-                                    error.toString(),
-                                    style: TextStyle(
-                                      color: Colors.grey[400],
-                                      fontSize: 12,
-                                      fontFamily: 'monospace',
-                                    ),
-                                    textAlign: TextAlign.center,
-                                    softWrap: true,
-                                    overflow: TextOverflow.visible,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: ElevatedButton(
-                                        onPressed: () {
-                                          if (_lastCheckedEmail != null) {
-                                            ref.invalidate(
-                                                manualEmailCheckProvider(
-                                                    _lastCheckedEmail!));
-                                          }
-                                        },
-                                        child: const Text('Tekrar Dene'),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: ElevatedButton(
-                                        onPressed: () {
-                                          _emailController.clear();
-                                          ref
-                                              .read(emailInputProvider.notifier)
-                                              .state = '';
-                                          ref
-                                              .read(isCheckingEmailProvider
-                                                  .notifier)
-                                              .state = false;
-                                          setState(() {
-                                            _lastCheckedEmail = null;
-                                          });
-                                        },
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.red,
-                                        ),
-                                        child: const Text('Temizle'),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                CircularProgressIndicator(),
+                                SizedBox(height: 16),
+                                Text('HaveIBeenPwned API kontrol ediliyor...'),
                               ],
                             ),
                           ),
-                        ),
-                      ),
+                      error:
+                          (error, _) => Center(
+                            child: SingleChildScrollView(
+                              child: CyberCard(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.error,
+                                      color: Colors.red,
+                                      size: 48,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'Kontrol sırasında hata oluştu',
+                                      style:
+                                          Theme.of(
+                                            context,
+                                          ).textTheme.titleMedium,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.withValues(
+                                          alpha: 0.1,
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: Colors.red.withValues(
+                                            alpha: 0.3,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        error.toString(),
+                                        style: TextStyle(
+                                          color: Colors.grey[400],
+                                          fontSize: 12,
+                                          fontFamily: 'monospace',
+                                        ),
+                                        textAlign: TextAlign.center,
+                                        softWrap: true,
+                                        overflow: TextOverflow.visible,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: ElevatedButton(
+                                            onPressed: () async {
+                                              if (_lastCheckedEmail != null) {
+                                                ref
+                                                    .read(
+                                                      manualCheckLoadingProvider
+                                                          .notifier,
+                                                    )
+                                                    .state = true;
+                                                try {
+                                                  final notifier = ref.read(
+                                                    manualEmailCheckProvider(
+                                                      _lastCheckedEmail!,
+                                                    ).notifier,
+                                                  );
+                                                  await notifier.checkEmail();
+                                                } finally {
+                                                  ref
+                                                      .read(
+                                                        manualCheckLoadingProvider
+                                                            .notifier,
+                                                      )
+                                                      .state = false;
+                                                }
+                                              }
+                                            },
+                                            child: const Text('Tekrar Dene'),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: ElevatedButton(
+                                            onPressed: () {
+                                              _emailController.clear();
+                                              ref
+                                                  .read(
+                                                    emailInputProvider.notifier,
+                                                  )
+                                                  .state = '';
+                                              ref
+                                                  .read(
+                                                    manualCheckLoadingProvider
+                                                        .notifier,
+                                                  )
+                                                  .state = false;
+                                              setState(() {
+                                                _lastCheckedEmail = null;
+                                              });
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.red,
+                                            ),
+                                            child: const Text('Temizle'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                     ),
                   ),
                 ],

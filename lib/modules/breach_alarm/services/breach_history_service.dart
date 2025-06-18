@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'email_breach_service.dart';
 
@@ -47,8 +48,8 @@ class BreachHistoryService {
   Box<StoredBreachResult>? _box;
   bool _isInitialized = false;
 
-  Future<void> init() async {
-    if (_isInitialized) return;
+  Future<bool> init() async {
+    if (_isInitialized && _box != null) return true;
 
     try {
       // Hive adapter'ını register et (sadece bir kez)
@@ -59,24 +60,24 @@ class BreachHistoryService {
       // Box'ı aç
       _box = await Hive.openBox<StoredBreachResult>(_boxName);
       _isInitialized = true;
-      print('Hive box initialized successfully');
+      debugPrint('Hive box initialized successfully');
+      return true;
     } catch (e) {
-      print('Hive initialization error: $e');
+      debugPrint('Hive initialization error: $e');
       _isInitialized = false;
+      return false;
     }
   }
 
   Future<void> saveResult(EmailBreachResult result) async {
-    try {
-      await _ensureInitialized();
-      if (_box != null) {
-        final stored = StoredBreachResult.fromEmailBreachResult(result);
-        await _box!.put(result.email.toLowerCase(), stored);
-        print('Result saved to Hive for: ${result.email}');
-      }
-    } catch (e) {
-      print('Error saving to Hive: $e');
-      // Hive hatası önemli değil, devam et
+    if (!_isInitialized || _box == null) {
+      await init(); // Eğer initialize edilmemişse, tekrar dene
+    }
+
+    if (_box != null) {
+      final stored = StoredBreachResult.fromEmailBreachResult(result);
+      await _box!.put(result.email.toLowerCase(), stored);
+      debugPrint('Result saved to Hive for: ${result.email}');
     }
   }
 
@@ -85,7 +86,7 @@ class BreachHistoryService {
       if (_box == null || !_isInitialized) return null;
       return _box!.get(email.toLowerCase());
     } catch (e) {
-      print('Error getting from Hive: $e');
+      debugPrint('Error getting from Hive: $e');
       return null;
     }
   }
@@ -96,7 +97,7 @@ class BreachHistoryService {
       return _box!.values.toList()
         ..sort((a, b) => b.lastChecked.compareTo(a.lastChecked));
     } catch (e) {
-      print('Error getting all results from Hive: $e');
+      debugPrint('Error getting all results from Hive: $e');
       return [];
     }
   }
@@ -108,7 +109,7 @@ class BreachHistoryService {
         await _box!.delete(email.toLowerCase());
       }
     } catch (e) {
-      print('Error deleting from Hive: $e');
+      debugPrint('Error deleting from Hive: $e');
     }
   }
 
@@ -119,12 +120,14 @@ class BreachHistoryService {
         await _box!.clear();
       }
     } catch (e) {
-      print('Error clearing Hive: $e');
+      debugPrint('Error clearing Hive: $e');
     }
   }
 
-  bool shouldCheckAgain(String email,
-      {Duration threshold = const Duration(days: 7)}) {
+  bool shouldCheckAgain(
+    String email, {
+    Duration threshold = const Duration(days: 7),
+  }) {
     try {
       final lastResult = getLastResult(email);
       if (lastResult == null) return true;
@@ -133,7 +136,7 @@ class BreachHistoryService {
       final difference = now.difference(lastResult.lastChecked);
       return difference > threshold;
     } catch (e) {
-      print('Error checking shouldCheckAgain: $e');
+      debugPrint('Error checking shouldCheckAgain: $e');
       return true; // Hata durumunda yeniden kontrol et
     }
   }
@@ -142,20 +145,39 @@ class BreachHistoryService {
     try {
       final cutoff = DateTime.now().subtract(Duration(days: days));
       return getAllResults()
-          .where((result) =>
-              result.hasBreaches && result.lastChecked.isAfter(cutoff))
+          .where(
+            (result) =>
+                result.hasBreaches && result.lastChecked.isAfter(cutoff),
+          )
           .toList();
     } catch (e) {
-      print('Error getting recent breaches: $e');
+      debugPrint('Error getting recent breaches: $e');
       return [];
     }
   }
 
   Future<void> _ensureInitialized() async {
     if (!_isInitialized) {
-      await init();
+      final success = await init();
+      if (!success) {
+        throw NotInitializedError('Hive veritabanı başlatılamadı');
+      }
+    }
+
+    if (_box == null) {
+      throw NotInitializedError('Hive box null durumda');
     }
   }
+}
+
+// NotInitializedError sınıfı oluşturalım
+class NotInitializedError extends Error {
+  final String message;
+
+  NotInitializedError(this.message);
+
+  @override
+  String toString() => 'NotInitializedError: $message';
 }
 
 // Hive adapter'ı
