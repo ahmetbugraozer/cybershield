@@ -49,35 +49,56 @@ class BreachHistoryService {
   bool _isInitialized = false;
 
   Future<bool> init() async {
-    if (_isInitialized && _box != null) return true;
+    // Zaten başarıyla initialize edilmişse tekrar deneme
+    if (_isInitialized && _box != null && _box!.isOpen) {
+      return true;
+    }
 
     try {
-      // Hive adapter'ını register et (sadece bir kez)
+      debugPrint('Hive başlatılıyor...');
+
+      // Adapter'ı register et (sadece bir kez)
       if (!Hive.isAdapterRegistered(0)) {
         Hive.registerAdapter(StoredBreachResultAdapter());
+        debugPrint('Hive adapter registered');
+      }
+
+      // Eğer box zaten açıksa kapat
+      if (_box != null && _box!.isOpen) {
+        await _box!.close();
       }
 
       // Box'ı aç
       _box = await Hive.openBox<StoredBreachResult>(_boxName);
       _isInitialized = true;
-      debugPrint('Hive box initialized successfully');
+
+      debugPrint('Hive box başarıyla açıldı. Kayıt sayısı: ${_box!.length}');
       return true;
     } catch (e) {
-      debugPrint('Hive initialization error: $e');
+      debugPrint('Hive başlatma hatası: $e');
       _isInitialized = false;
+      _box = null;
       return false;
     }
   }
 
   Future<void> saveResult(EmailBreachResult result) async {
-    if (!_isInitialized || _box == null) {
-      await init(); // Eğer initialize edilmemişse, tekrar dene
-    }
+    try {
+      // Initialize kontrolü
+      if (!_isInitialized || _box == null || !_box!.isOpen) {
+        final success = await init();
+        if (!success) {
+          debugPrint('Hive başlatılamadı - kayıt yapılamıyor');
+          return;
+        }
+      }
 
-    if (_box != null) {
       final stored = StoredBreachResult.fromEmailBreachResult(result);
       await _box!.put(result.email.toLowerCase(), stored);
-      debugPrint('Result saved to Hive for: ${result.email}');
+      debugPrint('Sonuç Hive\'a kaydedildi: ${result.email}');
+    } catch (e) {
+      debugPrint('Hive kayıt hatası: $e');
+      // Hatayı yeniden fırlatma, sadece log
     }
   }
 
@@ -157,15 +178,11 @@ class BreachHistoryService {
   }
 
   Future<void> _ensureInitialized() async {
-    if (!_isInitialized) {
+    if (!_isInitialized || _box == null || !_box!.isOpen) {
       final success = await init();
       if (!success) {
-        throw NotInitializedError('Hive veritabanı başlatılamadı');
+        throw Exception('Hive veritabanı başlatılamadı');
       }
-    }
-
-    if (_box == null) {
-      throw NotInitializedError('Hive box null durumda');
     }
   }
 }

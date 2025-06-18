@@ -65,146 +65,95 @@ class EmailBreachService {
     _dio.options.connectTimeout = const Duration(seconds: 30);
     _dio.options.receiveTimeout = const Duration(seconds: 30);
     _dio.options.headers = {
-      'User-Agent': 'CyberShield-Mobile-App',
+      'User-Agent': 'SecureCheck-Flutter-App/1.0',
       'Accept': 'application/json',
-      'Content-Type': 'application/json',
     };
 
-    // API anahtarı varsa header'a ekle (opsiyonel)
+    // API anahtarı varsa ekle
     if (EnvConfig.hasHibpKey) {
       _dio.options.headers['hibp-api-key'] = EnvConfig.hibpApiKey;
+      debugPrint('HIBP API anahtarı ile çalışıyor');
+    } else {
+      debugPrint('⚠️ HIBP API anahtarı yok - sınırlı erişim');
     }
   }
 
   Future<EmailBreachResult> checkEmailBreaches(String email) async {
     if (!_isValidEmail(email)) {
-      return EmailBreachResult(
-        email: email,
-        hasBreaches: false,
-        breaches: [],
-        lastChecked: DateTime.now(),
-        message: 'Geçersiz e-posta adresi formatı',
-      );
+      throw Exception('Geçersiz e-posta formatı');
     }
 
     try {
-      // URL encode email address
-      final encodedEmail = Uri.encodeComponent(email);
+      final encodedEmail = Uri.encodeComponent(email.toLowerCase().trim());
+      debugPrint('API çağrısı: $encodedEmail');
 
       final response = await _dio.get(
         '$_baseUrl/breachedaccount/$encodedEmail',
         queryParameters: {'truncateResponse': 'false'},
         options: Options(
-          validateStatus: (status) {
-            // 200 (found breaches), 404 (no breaches), 429 (rate limit) kabul et
-            return status != null &&
-                (status == 200 || status == 404 || status == 429);
-          },
+          validateStatus:
+              (status) =>
+                  status != null && [200, 404, 429, 401].contains(status),
         ),
       );
 
-      debugPrint('HIBP API Response: ${response.statusCode}');
-      debugPrint('Response data: ${response.data}');
+      debugPrint('API yanıt: ${response.statusCode}');
 
-      if (response.statusCode == 200) {
-        if (response.data is List) {
-          final List<dynamic> breachesJson = response.data;
-          final breaches =
-              breachesJson.map((json) => BreachInfo.fromJson(json)).toList();
+      switch (response.statusCode) {
+        case 200:
+          if (response.data is List) {
+            final breaches =
+                (response.data as List)
+                    .map((json) => BreachInfo.fromJson(json))
+                    .toList();
 
-          return EmailBreachResult(
-            email: email,
-            hasBreaches: true,
-            breaches: breaches,
-            lastChecked: DateTime.now(),
-            message: '${breaches.length} veri ihlali bulundu',
-          );
-        } else {
-          // Unexpected response format
+            return EmailBreachResult(
+              email: email,
+              hasBreaches: true,
+              breaches: breaches,
+              lastChecked: DateTime.now(),
+              message: '⚠️ ${breaches.length} veri ihlali bulundu!',
+            );
+          }
+          break;
+
+        case 404:
           return EmailBreachResult(
             email: email,
             hasBreaches: false,
             breaches: [],
             lastChecked: DateTime.now(),
-            message: 'API yanıt formatı beklenmedik',
+            message: '✅ Bu e-posta güvenli görünüyor',
           );
-        }
-      } else if (response.statusCode == 404) {
-        return EmailBreachResult(
-          email: email,
-          hasBreaches: false,
-          breaches: [],
-          lastChecked: DateTime.now(),
-          message: 'Bu e-posta adresi bilinen veri ihlallerinde bulunamadı ✓',
-        );
-      } else if (response.statusCode == 429) {
-        return EmailBreachResult(
-          email: email,
-          hasBreaches: false,
-          breaches: [],
-          lastChecked: DateTime.now(),
-          message:
-              'Çok fazla istek. Lütfen 1-2 dakika bekleyip tekrar deneyin.',
-        );
-      } else {
-        throw Exception('API yanıt hatası: ${response.statusCode}');
+
+        case 429:
+          throw Exception('⏱️ Çok fazla istek. 1-2 dakika bekleyin.');
+
+        case 401:
+          throw Exception('🔑 API anahtarı gerekli');
       }
+
+      throw Exception('Beklenmeyen API yanıtı: ${response.statusCode}');
     } on DioException catch (e) {
-      debugPrint('DioException: ${e.type} - ${e.message}');
-      debugPrint('Response: ${e.response?.data}');
-      return _handleError(e, email);
-    } catch (e) {
-      debugPrint('General Exception: $e');
-      return EmailBreachResult(
-        email: email,
-        hasBreaches: false,
-        breaches: [],
-        lastChecked: DateTime.now(),
-        message: 'Beklenmeyen hata: ${e.toString()}',
-      );
+      throw Exception(_getErrorMessage(e));
     }
   }
 
-  EmailBreachResult _handleError(DioException error, String email) {
-    String message;
-
-    switch (error.type) {
+  String _getErrorMessage(DioException e) {
+    switch (e.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.receiveTimeout:
-        message = 'Bağlantı zaman aşımı - İnternet bağlantınızı kontrol edin';
-        break;
+        return '⏱️ Bağlantı zaman aşımı';
       case DioExceptionType.connectionError:
-        message = 'İnternet bağlantısı yok - Lütfen bağlantınızı kontrol edin';
-        break;
+        return '🌐 İnternet bağlantısı yok';
       case DioExceptionType.badResponse:
-        if (error.response?.statusCode == 429) {
-          message =
-              'Çok fazla istek gönderildi. 1-2 dakika bekleyip tekrar deneyin.';
-        } else if (error.response?.statusCode == 401) {
-          message = 'API erişim hatası - Servis geçici olarak kullanılamıyor';
-        } else if (error.response?.statusCode == 404) {
-          return EmailBreachResult(
-            email: email,
-            hasBreaches: false,
-            breaches: [],
-            lastChecked: DateTime.now(),
-            message: 'Bu e-posta adresi bilinen veri ihlallerinde bulunamadı',
-          );
-        } else {
-          message = 'Servis hatası - Lütfen daha sonra tekrar deneyin';
-        }
-        break;
+        final status = e.response?.statusCode;
+        if (status == 429) return '⏱️ Çok fazla istek';
+        if (status == 401) return '🔑 API anahtarı gerekli';
+        return '⚠️ Servis hatası ($status)';
       default:
-        message = 'Bağlantı hatası - Lütfen tekrar deneyin';
+        return '❌ Bilinmeyen hata';
     }
-
-    return EmailBreachResult(
-      email: email,
-      hasBreaches: false,
-      breaches: [],
-      lastChecked: DateTime.now(),
-      message: message,
-    );
   }
 
   bool _isValidEmail(String email) {

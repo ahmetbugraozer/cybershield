@@ -23,181 +23,102 @@ final emailValidationProvider = Provider<bool>((ref) {
   return emailRegex.hasMatch(email);
 });
 
-// Debounced email provider
-final debouncedEmailProvider =
-    StateNotifierProvider<DebouncedEmailNotifier, String>((ref) {
-      return DebouncedEmailNotifier(ref);
-    });
+// TEK manuel kontrol provider'ı
 
-class DebouncedEmailNotifier extends StateNotifier<String> {
-  final Ref _ref;
-  Timer? _timer;
-
-  DebouncedEmailNotifier(this._ref) : super('') {
-    _ref.listen(emailInputProvider, (previous, next) {
-      _handleEmailChange(next);
-    });
-  }
-
-  void _handleEmailChange(String email) {
-    _timer?.cancel();
-
-    if (email.isEmpty || !_ref.read(emailValidationProvider)) {
-      state = '';
-      return;
-    }
-
-    _timer = Timer(const Duration(milliseconds: 800), () {
-      state = email;
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-}
-
-// Email breach check provider
-final emailBreachCheckProvider = FutureProvider.autoDispose<
-  EmailBreachResult?
->((ref) async {
-  final email = ref.watch(
-    emailInputProvider,
-  ); // Debounce kaldırıldı - direct input
-
-  if (email.isEmpty || !ref.read(emailValidationProvider)) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (ref.exists(isCheckingEmailProvider)) {
-        ref.read(isCheckingEmailProvider.notifier).state = false;
-      }
-    });
-    return null;
-  }
-
-  debugPrint('Starting breach check for: $email');
-  ref.read(isCheckingEmailProvider.notifier).state = true;
-
-  try {
-    final service = ref.read(emailBreachServiceProvider);
-
-    // History service initialize
-    final historyService = ref.read(breachHistoryServiceProvider);
-    await historyService.init();
-
-    // Önce cache kontrol et (opsiyonel - skip edilebilir test için)
-    // final lastResult = historyService.getLastResult(email);
-    // if (lastResult != null && !historyService.shouldCheckAgain(email, threshold: Duration(minutes: 5))) {
-    //   return EmailBreachResult(
-    //     email: lastResult.email,
-    //     hasBreaches: lastResult.hasBreaches,
-    //     breaches: [],
-    //     lastChecked: lastResult.lastChecked,
-    //     message: '${lastResult.message} (önbellekten)',
-    //   );
-    // }
-
-    // Direct API call
-    debugPrint('Making API call...');
-    final result = await service.checkEmailBreaches(email);
-    debugPrint('API call completed: ${result.message}');
-
-    // Sonucu cache'e kaydet
-    await historyService.saveResult(result);
-
-    return result;
-  } catch (e) {
-    debugPrint('Provider error: $e');
-    final shortError =
-        e.toString().length > 100
-            ? '${e.toString().substring(0, 97)}...'
-            : e.toString();
-    throw Exception('Kontrol edilemedi: $shortError');
-  } finally {
-    debugPrint('Clearing loading state');
-    if (ref.exists(isCheckingEmailProvider)) {
-      ref.read(isCheckingEmailProvider.notifier).state = false;
-    }
-  }
-});
-
-// Manual trigger provider for button - düzeltilmiş versiyon
-final manualEmailCheckProvider = StateNotifierProvider.family.autoDispose<
+// PROVIDER TANIMLAMA SIRASI DÜZELTİLDİ
+final manualEmailCheckProvider = StateNotifierProvider<
   ManualEmailCheckNotifier,
-  AsyncValue<EmailBreachResult?>,
-  String
->((ref, email) {
-  return ManualEmailCheckNotifier(ref, email);
+  AsyncValue<EmailBreachResult?>
+>((ref) {
+  return ManualEmailCheckNotifier(ref);
 });
 
 class ManualEmailCheckNotifier
     extends StateNotifier<AsyncValue<EmailBreachResult?>> {
   final Ref _ref;
-  final String _email;
 
-  ManualEmailCheckNotifier(this._ref, this._email)
-    : super(const AsyncValue.data(null));
+  ManualEmailCheckNotifier(this._ref) : super(const AsyncValue.data(null));
 
-  Future<void> checkEmail() async {
-    if (_email.isEmpty) {
-      state = const AsyncValue.data(null);
+  Future<void> checkEmail(String email) async {
+    if (email.isEmpty || !_isValidEmail(email)) {
+      state = AsyncValue.error(
+        'Geçerli bir e-posta adresi girin',
+        StackTrace.current,
+      );
       return;
     }
 
-    debugPrint('Manual check triggered for: $_email');
+    debugPrint('Manuel kontrol başlatılıyor: $email');
     state = const AsyncValue.loading();
 
     try {
-      final service = _ref.read(emailBreachServiceProvider);
-      final result = await service.checkEmailBreaches(_email);
+      _ref.read(isCheckingEmailProvider.notifier).state = true;
 
-      // Save to history - daha güvenli şekilde
+      final service = _ref.read(emailBreachServiceProvider);
+      final result = await service.checkEmailBreaches(email);
+
+      // ÖNCE SONUCU BAŞARILI OLARAK SET ET
+      state = AsyncValue.data(result);
+
+      // SONRA HISTORY'E KAYDETMEYI DENE (kritik değil)
       try {
         final historyService = _ref.read(breachHistoryServiceProvider);
-        await historyService.init(); // Burada init'i çağır, hata varsa yakala
-        await historyService.saveResult(result);
-        debugPrint('Result saved to history');
-      } catch (hiveError) {
-        // Hive hatası sonucu etkilemez, sadece kayıt yapılmaz
-        debugPrint('Hive save error (non-critical): $hiveError');
-      }
+        final initSuccess = await historyService.init();
 
-      state = AsyncValue.data(result);
+        if (initSuccess) {
+          await historyService.saveResult(result);
+          debugPrint('Sonuç geçmişe kaydedildi');
+          _ref.invalidate(breachHistoryProvider);
+          _ref.invalidate(recentBreachesProvider);
+        } else {
+          debugPrint('Hive initialize edilemedi - history kaydedilmedi');
+        }
+      } catch (hiveError) {
+        debugPrint('Geçmiş kaydetme hatası (kritik değil): $hiveError');
+        // Hive hatası sonucu etkilemesin
+      }
     } catch (e) {
-      debugPrint('API error: $e');
+      debugPrint('API hatası: $e');
       state = AsyncValue.error(e, StackTrace.current);
+    } finally {
+      _ref.read(isCheckingEmailProvider.notifier).state = false;
     }
+  }
+
+  bool _isValidEmail(String email) {
+    final emailRegex = RegExp(
+      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    );
+    return emailRegex.hasMatch(email);
   }
 }
 
-// Loading state için ayrı provider
-final manualCheckLoadingProvider = StateProvider<bool>((ref) => false);
-
-// Breach history provider with safe initialization
+// History provider'ları
 final breachHistoryProvider = FutureProvider<List<StoredBreachResult>>((
   ref,
 ) async {
   try {
-    final historyService = ref.watch(breachHistoryServiceProvider);
+    final historyService = ref.read(breachHistoryServiceProvider);
     await historyService.init();
     return historyService.getAllResults();
   } catch (e) {
-    debugPrint('History provider error: $e');
+    debugPrint('Geçmiş provider hatası: $e');
     return <StoredBreachResult>[];
   }
 });
 
-// Recent breaches provider with safe initialization
 final recentBreachesProvider = FutureProvider<List<StoredBreachResult>>((
   ref,
 ) async {
   try {
-    final historyService = ref.watch(breachHistoryServiceProvider);
+    final historyService = ref.read(breachHistoryServiceProvider);
     await historyService.init();
     return historyService.getRecentBreaches();
   } catch (e) {
-    debugPrint('Recent breaches provider error: $e');
+    debugPrint('Son ihlaller provider hatası: $e');
     return <StoredBreachResult>[];
   }
 });
+
+// Loading state için ayrı provider
+final manualCheckLoadingProvider = StateProvider<bool>((ref) => false);

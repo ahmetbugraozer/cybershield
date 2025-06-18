@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:secure_check/modules/breach_alarm/services/email_breach_service.dart';
 import '../../../core/widgets/cyber_card.dart';
 import '../viewmodel/breach_alarm_provider.dart';
 import 'widgets/breach_result_widget.dart';
@@ -17,22 +16,20 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
     with SingleTickerProviderStateMixin {
   final TextEditingController _emailController = TextEditingController();
   late TabController _tabController;
-  String? _lastCheckedEmail;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
 
-    // History service'i initialize et - daha güvenli yöntem
+    // History service'i uygulama başlangıcında initialize et
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         final historyService = ref.read(breachHistoryServiceProvider);
         await historyService.init();
-        debugPrint('History service initialized on app start');
+        debugPrint('Geçmiş servisi başlangıçta başlatıldı');
       } catch (e) {
-        debugPrint('Error initializing history service on app start: $e');
-        // Hata gösterebilirsiniz ancak uygulama çalışmaya devam etmeli
+        debugPrint('Geçmiş servisi başlangıç hatası: $e');
       }
     });
   }
@@ -48,18 +45,9 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
   Widget build(BuildContext context) {
     final isValidEmail = ref.watch(emailValidationProvider);
     final email = ref.watch(emailInputProvider);
-    final manualLoading = ref.watch(manualCheckLoadingProvider);
-
-    // Manual check result watch - düzeltilmiş
-    final manualCheckNotifier =
-        _lastCheckedEmail != null
-            ? ref.watch(manualEmailCheckProvider(_lastCheckedEmail!).notifier)
-            : null;
-
-    final manualCheckState =
-        _lastCheckedEmail != null
-            ? ref.watch(manualEmailCheckProvider(_lastCheckedEmail!))
-            : const AsyncValue<EmailBreachResult?>.data(null);
+    final isChecking = ref.watch(isCheckingEmailProvider);
+    // DÜZELTME: Doğru provider'ı kullan
+    final checkResult = ref.watch(manualEmailCheckProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -116,7 +104,6 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                               borderRadius: BorderRadius.circular(12),
                             ),
                             prefixIcon: const Icon(Icons.email),
-                            // Email validation durumuna göre renk
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
@@ -150,12 +137,6 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                                       ref
                                           .read(emailInputProvider.notifier)
                                           .state = '';
-                                      ref
-                                          .read(
-                                            isCheckingEmailProvider.notifier,
-                                          )
-                                          .state = false;
-                                      ref.invalidate(emailBreachCheckProvider);
                                     },
                                   ),
                               ],
@@ -163,14 +144,10 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                           ),
                           onChanged: (value) {
                             ref.read(emailInputProvider.notifier).state = value;
-                            if (value.isEmpty) {
-                              ref.read(isCheckingEmailProvider.notifier).state =
-                                  false;
-                            }
                           },
                         ),
 
-                        // Email validation mesajı
+                        // Email validasyon mesajı
                         if (email.isNotEmpty && !isValidEmail) ...[
                           const SizedBox(height: 8),
                           Container(
@@ -205,7 +182,7 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                           width: double.infinity,
                           child: ElevatedButton(
                             onPressed:
-                                (manualLoading ||
+                                (isChecking ||
                                         _emailController.text.isEmpty ||
                                         !isValidEmail)
                                     ? null
@@ -225,40 +202,15 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                                         return;
                                       }
 
-                                      debugPrint(
-                                        'Button pressed for email: $email',
-                                      );
-
-                                      // Loading state'i aktif et
-                                      ref
+                                      // DÜZELTME: Doğru notifier'ı çağır
+                                      await ref
                                           .read(
-                                            manualCheckLoadingProvider.notifier,
+                                            manualEmailCheckProvider.notifier,
                                           )
-                                          .state = true;
-
-                                      setState(() {
-                                        _lastCheckedEmail = email;
-                                      });
-
-                                      // Manuel kontrolü başlat
-                                      try {
-                                        final notifier = ref.read(
-                                          manualEmailCheckProvider(
-                                            email,
-                                          ).notifier,
-                                        );
-                                        await notifier.checkEmail();
-                                      } finally {
-                                        ref
-                                            .read(
-                                              manualCheckLoadingProvider
-                                                  .notifier,
-                                            )
-                                            .state = false;
-                                      }
+                                          .checkEmail(email);
                                     },
                             child:
-                                manualLoading
+                                isChecking
                                     ? const Row(
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
@@ -282,9 +234,9 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                   ),
                   const SizedBox(height: 20),
 
-                  // Sonuç gösterimi - düzeltilmiş
+                  // Sonuç gösterimi
                   Expanded(
-                    child: manualCheckState.when<Widget>(
+                    child: checkResult.when<Widget>(
                       data:
                           (result) =>
                               result != null
@@ -350,8 +302,6 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                                           fontFamily: 'monospace',
                                         ),
                                         textAlign: TextAlign.center,
-                                        softWrap: true,
-                                        overflow: TextOverflow.visible,
                                       ),
                                     ),
                                     const SizedBox(height: 16),
@@ -360,28 +310,16 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                                         Expanded(
                                           child: ElevatedButton(
                                             onPressed: () async {
-                                              if (_lastCheckedEmail != null) {
-                                                ref
+                                              final email =
+                                                  _emailController.text.trim();
+                                              if (email.isNotEmpty) {
+                                                // DÜZELTME: Doğru notifier'ı çağır
+                                                await ref
                                                     .read(
-                                                      manualCheckLoadingProvider
+                                                      manualEmailCheckProvider
                                                           .notifier,
                                                     )
-                                                    .state = true;
-                                                try {
-                                                  final notifier = ref.read(
-                                                    manualEmailCheckProvider(
-                                                      _lastCheckedEmail!,
-                                                    ).notifier,
-                                                  );
-                                                  await notifier.checkEmail();
-                                                } finally {
-                                                  ref
-                                                      .read(
-                                                        manualCheckLoadingProvider
-                                                            .notifier,
-                                                      )
-                                                      .state = false;
-                                                }
+                                                    .checkEmail(email);
                                               }
                                             },
                                             child: const Text('Tekrar Dene'),
@@ -397,15 +335,6 @@ class _BreachAlarmPageState extends ConsumerState<BreachAlarmPage>
                                                     emailInputProvider.notifier,
                                                   )
                                                   .state = '';
-                                              ref
-                                                  .read(
-                                                    manualCheckLoadingProvider
-                                                        .notifier,
-                                                  )
-                                                  .state = false;
-                                              setState(() {
-                                                _lastCheckedEmail = null;
-                                              });
                                             },
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor: Colors.red,
