@@ -4,10 +4,7 @@ import '../../../../core/widgets/cyber_card.dart';
 class RecommendationsWidget extends StatelessWidget {
   final List<String> recommendations;
 
-  const RecommendationsWidget({
-    super.key,
-    required this.recommendations,
-  });
+  const RecommendationsWidget({super.key, required this.recommendations});
 
   @override
   Widget build(BuildContext context) {
@@ -17,9 +14,9 @@ class RecommendationsWidget extends StatelessWidget {
         children: [
           Text(
             'Güvenlik Önerileri',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           ...recommendations.asMap().entries.map((entry) {
@@ -49,7 +46,7 @@ class RecommendationsWidget extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       recommendation,

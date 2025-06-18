@@ -18,36 +18,25 @@ class AppTheme {
       scaffoldBackgroundColor: darkBackground,
       textTheme: GoogleFonts.poppinsTextTheme(
         ThemeData.dark().textTheme.copyWith(
-              titleLarge: const TextStyle(
-                fontSize: 25,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-              headlineSmall: const TextStyle(
-                fontSize: 25,
-                fontWeight: FontWeight.bold,
-                color: neonTurquoise,
-              ),
-              titleSmall: const TextStyle(
-                fontSize: 15,
-                color: Colors.white,
-              ),
-              bodyMedium: const TextStyle(
-                fontSize: 15,
-                color: Colors.white,
-              ),
-              bodySmall: const TextStyle(
-                fontSize: 15,
-                color: Colors.white,
-              ),
-            ),
+          titleLarge: const TextStyle(
+            fontSize: 25,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          headlineSmall: const TextStyle(
+            fontSize: 25,
+            fontWeight: FontWeight.bold,
+            color: neonTurquoise,
+          ),
+          titleSmall: const TextStyle(fontSize: 15, color: Colors.white),
+          bodyMedium: const TextStyle(fontSize: 15, color: Colors.white),
+          bodySmall: const TextStyle(fontSize: 15, color: Colors.white),
+        ),
       ),
       cardTheme: CardTheme(
         color: cardBackground,
         elevation: 8,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
